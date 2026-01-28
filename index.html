@@ -4,270 +4,453 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Convertisseur d’images</title>
+
   <style>
-  :root{
-    --border:#e7e7ea;
-    --text:#111;
-    --muted:#6b7280;
-    --bg:#ffffff;
-    --soft:#f7f7f8;
-    --shadow: 0 10px 30px rgba(0,0,0,.06);
-    --radius: 18px;
-  }
+    :root{
+      --bg: #ffffff;
+      --card: #ffffff;
+      --soft: #f6f7f8;
+      --border: #e7e7ea;
+      --text: #111111;
+      --muted: #6b7280;
+      --accent: #111111;
 
-  *{ box-sizing:border-box; }
-  html,body{ height:100%; }
-  body{
-    font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
-    margin:0;
-    background: var(--bg);
-    color: var(--text);
-  }
+      --radius-xl: 22px;
+      --radius-lg: 18px;
+      --radius-md: 14px;
+      --shadow: 0 14px 40px rgba(0,0,0,.08);
 
-  .wrap{
-    max-width: 1040px;
-    margin: 28px auto;
-    padding: 0 18px;
-  }
+      --pad: clamp(14px, 2.2vw, 20px);
+      --gap: clamp(12px, 2vw, 16px);
+      --maxw: 1100px;
+    }
 
-  h1{ font-size: 28px; margin:0 0 6px; letter-spacing:-.2px; }
-  .sub{ color:var(--muted); margin:0 0 18px; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body{
+      margin:0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
 
-  .card{
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 18px;
-    box-shadow: var(--shadow);
-    background: #fff;
-  }
+    /* NOTE: idéal pour iframe Google Sites : s'adapte naturellement à la largeur disponible */
+    .wrap{
+      max-width: var(--maxw);
+      margin: 0 auto;
+      padding: var(--pad);
+    }
 
-  .drop{
-    border: 2px dashed var(--border);
-    border-radius: var(--radius);
-    padding: 22px;
-    text-align: center;
-    transition: .15s;
-    background: var(--soft);
-    overflow: hidden;
-  }
-  .drop.drag{ border-color:#111; background:#f0f0f1; }
-  .drop h2{ margin:0 0 6px; font-size:18px; }
-  .drop p{ margin:0; color:var(--muted); }
-  .hint{ color:var(--muted); font-size:13px; margin-top:10px; }
+    .top{
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap: 10px;
+      margin-bottom: var(--gap);
+    }
 
-  .row{
-    display:grid;
-    grid-template-columns: 1fr;
-    gap: 14px;
-    margin-top: 14px;
-    align-items: stretch;
-  }
-  @media (min-width: 900px){
-    .row{ grid-template-columns: 1.15fr .85fr; }
-  }
+    .title{
+      margin: 0;
+      font-size: clamp(20px, 2.4vw, 30px);
+      letter-spacing: -0.3px;
+      line-height: 1.15;
+    }
 
-  /* Colonnes "égales" */
-  .list, .controls{
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: #fff;
-    overflow: hidden;
-    min-height: 420px;
-  }
+    .subtitle{
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: clamp(12px, 1.35vw, 14px);
+      line-height: 1.4;
+    }
 
-  /* Liste : scroll propre et pas de grand vide */
-  .list{
-    display:flex;
-    flex-direction:column;
-  }
-  #list{
-    overflow:auto;
-    max-height: 520px;
-    scrollbar-gutter: stable;
-  }
+    .badge{
+      display:none;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    @media (min-width: 860px){
+      .badge{ display:inline-flex; }
+    }
 
-  .controls{
-    padding: 14px;
-  }
+    .card{
+      border: 1px solid var(--border);
+      background: var(--card);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
 
-  label{
-    display:block;
-    font-size: 12.5px;
-    color: var(--muted);
-    margin: 10px 0 6px;
-  }
+    .card-inner{
+      padding: var(--pad);
+      display: grid;
+      gap: var(--gap);
+    }
 
-  /* Inputs / selects : plus de dépassement */
-  select, input{
-    width: 100%;
-    max-width: 100%;
-    display:block;
-    padding: 10px 12px;
-    border-radius: 14px;
-    border: 1px solid var(--border);
-    font-size: 14px;
-    background:#fff;
-    outline: none;
-  }
-  select:focus, input:focus{
-    border-color: #111;
-    box-shadow: 0 0 0 4px rgba(17,17,17,.08);
-  }
+    /* Drop zone */
+    .drop{
+      border: 2px dashed var(--border);
+      border-radius: var(--radius-xl);
+      background: linear-gradient(180deg, var(--soft), #fff);
+      padding: clamp(14px, 2.4vw, 22px);
+      text-align: center;
+      cursor: pointer;
+      transition: .15s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .drop.drag{
+      border-color: var(--accent);
+      background: #f0f1f2;
+      transform: translateY(-1px);
+    }
+    .drop h2{
+      margin: 0 0 6px;
+      font-size: clamp(15px, 1.8vw, 18px);
+      line-height: 1.2;
+    }
+    .drop p{
+      margin: 0;
+      color: var(--muted);
+      font-size: clamp(12px, 1.3vw, 14px);
+      line-height: 1.35;
+    }
 
-  .grid2{
-    display:grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
+    .hint{
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
 
-  .btns{
-    display:flex;
-    gap:10px;
-    flex-wrap: wrap;
-    margin-top: 12px;
-  }
+    /* Layout columns */
+    .columns{
+      display: grid;
+      gap: var(--gap);
+      align-items: stretch;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 900px){
+      .columns{
+        grid-template-columns: 1.25fr .85fr;
+      }
+    }
 
-  button{
-    padding: 10px 12px;
-    border-radius: 14px;
-    border: 1px solid var(--border);
-    background: #fff;
-    cursor: pointer;
-    font-weight: 650;
-    transition: .12s;
-  }
-  button:hover{ transform: translateY(-1px); }
-  button.primary{
-    background:#111;
-    color:#fff;
-    border-color:#111;
-  }
-  button:disabled{
-    opacity:.5;
-    cursor:not-allowed;
-    transform:none;
-  }
+    /* Panels */
+    .panel{
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      background: #fff;
+      overflow: hidden;
+      min-height: 420px;
+      display: flex;
+      flex-direction: column;
+    }
 
-  .bar{
-    height: 10px;
-    background: #f0f0f1;
-    border-radius: 999px;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    margin-top: 8px;
-  }
-  .bar > div{ height:100%; width:0%; background:#111; }
+    .panel-head{
+      padding: 14px 14px 12px;
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      display:flex;
+      align-items:baseline;
+      justify-content:space-between;
+      gap: 10px;
+    }
+    .panel-title{
+      margin:0;
+      font-size: 14px;
+      letter-spacing: .2px;
+    }
+    .panel-meta{
+      margin:0;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
 
-  .foot{ color:var(--muted); font-size:12px; margin-top:10px; }
+    /* List */
+    .list{
+      padding: 0;
+      margin: 0;
+      list-style: none;
+      overflow: auto;
+      scrollbar-gutter: stable;
+      flex: 1;
+      background: #fff;
+    }
 
-  /* Items liste */
-  .item{
-    display:grid;
-    grid-template-columns: 64px 1fr auto;
-    gap: 12px;
-    align-items:center;
-    padding: 10px 12px;
-    border-top: 1px solid var(--border);
-  }
-  .item:first-child{ border-top:none; }
+    .empty{
+      padding: 18px 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .empty strong{ color: var(--text); }
 
-  .thumb{
-    width:64px;
-    height:48px;
-    border-radius: 12px;
-    border:1px solid var(--border);
-    object-fit: cover;
-    background:#fff;
-  }
+    .item{
+      display:grid;
+      grid-template-columns: 64px 1fr auto;
+      gap: 12px;
+      align-items:center;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+    }
+    .item:first-child{ border-top: none; }
 
-  .name{ font-weight: 650; font-size: 14px; }
-  .meta{ color:var(--muted); font-size: 12px; margin-top:2px; }
+    .thumb{
+      width: 64px;
+      height: 48px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      background: #fff;
+      object-fit: cover;
+    }
 
-  .x{
-    border:none;
-    background:transparent;
-    font-size: 20px;
-    line-height: 1;
-    cursor:pointer;
-    color: #9aa0a6;
-    padding: 6px 8px;
-    border-radius: 10px;
-  }
-  .x:hover{ color:#111; background:#f3f4f6; }
-</style>
+    .name{
+      font-weight: 650;
+      font-size: 14px;
+      line-height: 1.2;
+      word-break: break-word;
+    }
+    .meta{
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 3px;
+    }
 
+    .x{
+      border: none;
+      background: transparent;
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      color: #9aa0a6;
+      padding: 6px 8px;
+      border-radius: 10px;
+      transition: .12s ease;
+    }
+    .x:hover{
+      color: var(--text);
+      background: #f3f4f6;
+    }
+
+    /* Controls */
+    .controls{
+      padding: 14px;
+      display:flex;
+      flex-direction: column;
+      gap: 12px;
+      flex: 1;
+      background: #fff;
+    }
+
+    .grid2{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    @media (max-width: 520px){
+      .grid2{ grid-template-columns: 1fr; }
+    }
+
+    .field label{
+      display:block;
+      font-size: 12px;
+      color: var(--muted);
+      margin: 0 0 6px;
+    }
+
+    select, input{
+      width:100%;
+      max-width: 100%;
+      display:block;
+      padding: 10px 12px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      font-size: 14px;
+      background: #fff;
+      outline: none;
+      transition: .12s ease;
+    }
+    select:focus, input:focus{
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(17,17,17,.08);
+    }
+    input:disabled{
+      background: #f3f4f6;
+      color: #9aa0a6;
+    }
+
+    .btns{
+      display:flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 2px;
+    }
+
+    button{
+      padding: 10px 12px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      background: #fff;
+      cursor: pointer;
+      font-weight: 650;
+      transition: .12s ease;
+      white-space: nowrap;
+    }
+    button:hover{ transform: translateY(-1px); }
+    button:disabled{ opacity:.5; cursor:not-allowed; transform:none; }
+
+    button.primary{
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    /* Progress */
+    .progress-wrap{
+      margin-top: auto;
+      padding-top: 6px;
+      display:flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .bar{
+      height: 10px;
+      background: #f0f0f1;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .bar > div{
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      transition: width .12s ease;
+    }
+
+    .status{
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .note{
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    /* Small polish */
+    .kpi{
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
 </head>
+
 <body>
   <div class="wrap">
-    <h1>Convertisseur d’images</h1>
-    <p class="sub">Glisser-déposer • Conversion par lot • Redimensionnement • Compression (tout se fait dans le navigateur)</p>
+    <div class="top">
+      <div>
+        <h1 class="title">Convertisseur d’images</h1>
+        <p class="subtitle">Glisser-déposer • Conversion par lot • Redimensionnement • Compression (tout se fait dans le navigateur)</p>
+      </div>
+      <div class="badge">Aucune image n’est envoyée sur un serveur</div>
+    </div>
 
     <div class="card">
-      <div id="drop" class="drop" role="button" tabindex="0" aria-label="Zone de dépôt">
-        <h2>Dépose tes images ici</h2>
-        <p>ou clique pour sélectionner des fichiers</p>
-        <input id="picker" type="file" accept="image/*" multiple hidden>
-        <p class="hint">Formats en entrée : la plupart des images web (JPG/PNG/WebP…). HEIC iPhone : selon navigateur (sinon il faut une extension/lib dédiée).</p>
-      </div>
-
-      <div class="row">
-        <div class="list" id="list"></div>
-
-        <div class="controls">
-          <div class="grid2">
-            <div>
-              <label>Format de sortie</label>
-              <select id="format">
-                <option value="image/jpeg">JPG</option>
-                <option value="image/png">PNG</option>
-                <option value="image/webp">WebP</option>
-              </select>
-            </div>
-            <div>
-              <label>Qualité (JPG/WebP)</label>
-              <input id="quality" type="number" min="0.1" max="1" step="0.05" value="0.9">
-            </div>
-          </div>
-
-          <div class="grid2">
-            <div>
-              <label>Redimensionnement</label>
-              <select id="resizeMode">
-                <option value="none">Aucun</option>
-                <option value="max">Limiter le plus grand côté</option>
-                <option value="width">Forcer largeur</option>
-                <option value="height">Forcer hauteur</option>
-              </select>
-            </div>
-            <div>
-              <label>Valeur (px)</label>
-              <input id="resizeValue" type="number" min="1" step="1" value="1600" disabled>
-            </div>
-          </div>
-
-          <label>Nom des fichiers</label>
-          <select id="naming">
-            <option value="keep">Garder le nom</option>
-            <option value="suffix">Ajouter suffixe (_converti)</option>
-            <option value="timestamp">Ajouter date/heure</option>
-          </select>
-
-          <div class="btns">
-            <button class="primary" id="convert" disabled>Convertir & Télécharger</button>
-            <button id="downloadZip" disabled>Télécharger en .zip</button>
-            <button id="clear" disabled>Vider la liste</button>
-          </div>
-
-          <div style="margin-top:12px">
-            <div class="bar" aria-label="Progression"><div id="prog"></div></div>
-            <div class="foot" id="status">Aucun fichier.</div>
-          </div>
-
-          <div class="foot">Note : le ZIP utilise une librairie JS chargée depuis un CDN. Si tu veux 0 dépendance externe, dis-moi et je te le fais en version “tout local”.</div>
+      <div class="card-inner">
+        <div id="drop" class="drop" role="button" tabindex="0" aria-label="Zone de dépôt">
+          <h2>Dépose tes images ici</h2>
+          <p>ou clique pour sélectionner des fichiers</p>
+          <input id="picker" type="file" accept="image/*" multiple hidden>
+          <div class="hint">Formats en entrée : JPG / PNG / WebP… (HEIC iPhone : selon navigateur).</div>
         </div>
-      </div>
-    </div>
-  </div>
+
+        <div class="columns">
+          <!-- LIST -->
+          <div class="panel">
+            <div class="panel-head">
+              <p class="panel-title">Fichiers</p>
+              <p class="panel-meta"><span id="count" class="kpi">0</span> sélectionné(s)</p>
+            </div>
+            <ul class="list" id="list">
+              <li class="empty"><strong>Aucune image ajoutée.</strong><br/>Glisse-dépose des fichiers dans la zone au-dessus, ou clique pour les sélectionner.</li>
+            </ul>
+          </div>
+
+          <!-- CONTROLS -->
+          <div class="panel">
+            <div class="panel-head">
+              <p class="panel-title">Réglages</p>
+              <p class="panel-meta">Sortie & actions</p>
+            </div>
+
+            <div class="controls">
+              <div class="grid2">
+                <div class="field">
+                  <label>Format de sortie</label>
+                  <select id="format">
+                    <option value="image/jpeg">JPG</option>
+                    <option value="image/png">PNG</option>
+                    <option value="image/webp">WebP</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label>Qualité (JPG/WebP)</label>
+                  <input id="quality" type="number" min="0.1" max="1" step="0.05" value="0.9" />
+                </div>
+              </div>
+
+              <div class="grid2">
+                <div class="field">
+                  <label>Redimensionnement</label>
+                  <select id="resizeMode">
+                    <option value="none">Aucun</option>
+                    <option value="max">Limiter le plus grand côté</option>
+                    <option value="width">Forcer largeur</option>
+                    <option value="height">Forcer hauteur</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label>Valeur (px)</label>
+                  <input id="resizeValue" type="number" min="1" step="1" value="1600" disabled />
+                </div>
+              </div>
+
+              <div class="field">
+                <label>Nom des fichiers</label>
+                <select id="naming">
+                  <option value="keep">Garder le nom</option>
+                  <option value="suffix">Ajouter suffixe (_converti)</option>
+                  <option value="timestamp">Ajouter date/heure</option>
+                </select>
+              </div>
+
+              <div class="btns">
+                <button class="primary" id="convert" disabled>Convertir & Télécharger</button>
+                <button id="downloadZip" disabled>Télécharger en .zip</button>
+                <button id="clear" disabled>Vider la liste</button>
+              </div>
+
+              <div class="progress-wrap">
+                <div class="bar" aria-label="Progression"><div id="prog"></div></div>
+                <div class="status" id="status">Aucun fichier.</div>
+                <div class="note">Le ZIP utilise une librairie JS chargée via CDN. Si tu veux une version 100% “sans dépendance externe”, dis-moi.</div>
+              </div>
+            </div>
+          </div>
+        </div><!-- /columns -->
+      </div><!-- /card-inner -->
+    </div><!-- /card -->
+  </div><!-- /wrap -->
 
   <!-- JSZip for batch zip download -->
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -289,6 +472,7 @@
 
     const prog = document.getElementById('prog');
     const statusEl = document.getElementById('status');
+    const countEl = document.getElementById('count');
 
     /** @type {{file: File, url: string}[]} */
     let files = [];
@@ -328,12 +512,20 @@
       statusEl.textContent = txt;
     }
 
+    function updateCount(){
+      countEl.textContent = String(files.length);
+    }
+
     function refreshUI(){
       listEl.innerHTML = '';
+      updateCount();
+
       if (files.length === 0){
-        listEl.innerHTML = `<div class="item" style="grid-template-columns:1fr">
-          <div style="padding:10px;color:#666">Aucune image ajoutée.</div>
-        </div>`;
+        const li = document.createElement('li');
+        li.className = 'empty';
+        li.innerHTML = '<strong>Aucune image ajoutée.</strong><br/>Glisse-dépose des fichiers dans la zone au-dessus, ou clique pour les sélectionner.';
+        listEl.appendChild(li);
+
         btnConvert.disabled = true;
         btnZip.disabled = true;
         btnClear.disabled = true;
@@ -344,8 +536,9 @@
 
       for (let i=0;i<files.length;i++){
         const it = files[i];
-        const row = document.createElement('div');
-        row.className = 'item';
+
+        const li = document.createElement('li');
+        li.className = 'item';
 
         const img = document.createElement('img');
         img.className = 'thumb';
@@ -353,6 +546,7 @@
         img.alt = it.file.name;
 
         const info = document.createElement('div');
+
         const name = document.createElement('div');
         name.className = 'name';
         name.textContent = it.file.name;
@@ -370,10 +564,11 @@
         x.title = 'Retirer';
         x.addEventListener('click', () => removeAt(i));
 
-        row.appendChild(img);
-        row.appendChild(info);
-        row.appendChild(x);
-        listEl.appendChild(row);
+        li.appendChild(img);
+        li.appendChild(info);
+        li.appendChild(x);
+
+        listEl.appendChild(li);
       }
 
       btnConvert.disabled = false;
@@ -420,11 +615,9 @@
     updateResizeUI();
 
     async function fileToBitmap(file){
-      // Use createImageBitmap when possible (fast)
       try{
         return await createImageBitmap(file);
       }catch{
-        // fallback via <img>
         const img = new Image();
         img.src = URL.createObjectURL(file);
         await img.decode();
@@ -485,10 +678,7 @@
 
       if (!blob) throw new Error('Conversion impossible (format non supporté par ce navigateur).');
 
-      return {
-        blob,
-        filename: buildName(file.name, outExt)
-      };
+      return { blob, filename: buildName(file.name, outExt) };
     }
 
     function downloadBlob(blob, filename){
