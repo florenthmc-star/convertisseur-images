@@ -484,6 +484,8 @@
 
     /** @type {{file: File, url: string}[]} */
     let files = [];
+let isPicking = false;
+let lastPickTs = 0;
 
     function fmtBytes(n){
       const u = ["o","Ko","Mo","Go"];
@@ -600,18 +602,49 @@
       refreshUI();
     }
 
-    // Drop events
-    drop.addEventListener('click', () => picker.click());
-    drop.addEventListener('keydown', (e) => { if(e.key==='Enter' || e.key===' ') picker.click(); });
-    drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('drag'); });
-    drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
-    drop.addEventListener('drop', (e) => {
-      e.preventDefault();
-      drop.classList.remove('drag');
-      addFiles(e.dataTransfer.files);
-    });
+function openPicker() {
+  const now = Date.now();
 
-    picker.addEventListener('change', () => addFiles(picker.files));
+  // Anti double-déclenchement (iframe / focus / click répété)
+  if (isPicking) return;
+  if (now - lastPickTs < 700) return;
+
+  isPicking = true;
+  lastPickTs = now;
+
+  picker.click();
+}
+
+drop.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  openPicker();
+});
+
+drop.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    e.stopPropagation();
+    openPicker();
+  }
+});
+
+picker.addEventListener('change', () => {
+  // Ajout des fichiers sélectionnés
+  addFiles(picker.files);
+
+  // IMPORTANT : reset pour permettre de re-sélectionner le même fichier
+  picker.value = '';
+
+  // Déverrouille après un court délai (évite ré-ouverture immédiate)
+  setTimeout(() => { isPicking = false; }, 300);
+});
+
+// Si l’utilisateur annule la boîte de dialogue, on déverrouille aussi
+window.addEventListener('focus', () => {
+  setTimeout(() => { isPicking = false; }, 300);
+});
+
 
     // Resize controls
     function updateResizeUI(){
