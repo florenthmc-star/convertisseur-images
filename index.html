@@ -5,45 +5,197 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Convertisseur d’images</title>
   <style>
-    :root { --b:#e6e6e6; --t:#111; --m:#666; }
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:0;background:#fff;color:var(--t)}
-    .wrap{max-width:980px;margin:24px auto;padding:0 16px}
-    h1{font-size:28px;margin:0 0 6px}
-    .sub{color:var(--m);margin:0 0 18px}
-    .card{border:1px solid var(--b);border-radius:16px;padding:16px;box-shadow:0 6px 24px rgba(0,0,0,.04)}
-    .drop{
-      border:2px dashed var(--b);border-radius:16px;padding:22px;text-align:center;
-      transition:.15s; background:#fafafa
-    }
-    .drop.drag{border-color:#111;background:#f3f3f3}
-    .drop h2{margin:0 0 6px;font-size:18px}
-    .drop p{margin:0;color:var(--m)}
-    .row{display:grid;grid-template-columns:1fr;gap:12px;margin-top:14px}
-    @media (min-width:820px){ .row{grid-template-columns:1.2fr .8fr} }
-    .controls{border:1px solid var(--b);border-radius:16px;padding:14px}
-    label{display:block;font-size:13px;color:var(--m);margin:10px 0 6px}
-    select,input{width:100%;padding:10px;border-radius:12px;border:1px solid var(--b);font-size:14px}
-    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-    button{
-      padding:10px 12px;border-radius:12px;border:1px solid var(--b);
-      background:#fff;cursor:pointer;font-weight:600
-    }
-    button.primary{background:#111;color:#fff;border-color:#111}
-    button:disabled{opacity:.5;cursor:not-allowed}
-    .list{border:1px solid var(--b);border-radius:16px;overflow:hidden}
-    .item{display:grid;grid-template-columns:64px 1fr auto;gap:12px;align-items:center;padding:10px 12px;border-top:1px solid var(--b)}
-    .item:first-child{border-top:none}
-    .thumb{width:64px;height:48px;border-radius:10px;border:1px solid var(--b);object-fit:cover;background:#fff}
-    .name{font-weight:600;font-size:14px}
-    .meta{color:var(--m);font-size:12px;margin-top:2px}
-    .x{border:none;background:transparent;font-size:18px;line-height:1;cursor:pointer;color:#999}
-    .x:hover{color:#111}
-    .bar{height:10px;background:#f0f0f0;border-radius:999px;overflow:hidden;border:1px solid var(--b)}
-    .bar > div{height:100%;width:0%}
-    .foot{color:var(--m);font-size:12px;margin-top:10px}
-    .hint{color:var(--m);font-size:13px;margin-top:10px}
-  </style>
+  :root{
+    --border:#e7e7ea;
+    --text:#111;
+    --muted:#6b7280;
+    --bg:#ffffff;
+    --soft:#f7f7f8;
+    --shadow: 0 10px 30px rgba(0,0,0,.06);
+    --radius: 18px;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
+    margin:0;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  .wrap{
+    max-width: 1040px;
+    margin: 28px auto;
+    padding: 0 18px;
+  }
+
+  h1{ font-size: 28px; margin:0 0 6px; letter-spacing:-.2px; }
+  .sub{ color:var(--muted); margin:0 0 18px; }
+
+  .card{
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    box-shadow: var(--shadow);
+    background: #fff;
+  }
+
+  .drop{
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+    text-align: center;
+    transition: .15s;
+    background: var(--soft);
+    overflow: hidden;
+  }
+  .drop.drag{ border-color:#111; background:#f0f0f1; }
+  .drop h2{ margin:0 0 6px; font-size:18px; }
+  .drop p{ margin:0; color:var(--muted); }
+  .hint{ color:var(--muted); font-size:13px; margin-top:10px; }
+
+  .row{
+    display:grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-top: 14px;
+    align-items: stretch;
+  }
+  @media (min-width: 900px){
+    .row{ grid-template-columns: 1.15fr .85fr; }
+  }
+
+  /* Colonnes "égales" */
+  .list, .controls{
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: #fff;
+    overflow: hidden;
+    min-height: 420px;
+  }
+
+  /* Liste : scroll propre et pas de grand vide */
+  .list{
+    display:flex;
+    flex-direction:column;
+  }
+  #list{
+    overflow:auto;
+    max-height: 520px;
+    scrollbar-gutter: stable;
+  }
+
+  .controls{
+    padding: 14px;
+  }
+
+  label{
+    display:block;
+    font-size: 12.5px;
+    color: var(--muted);
+    margin: 10px 0 6px;
+  }
+
+  /* Inputs / selects : plus de dépassement */
+  select, input{
+    width: 100%;
+    max-width: 100%;
+    display:block;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    font-size: 14px;
+    background:#fff;
+    outline: none;
+  }
+  select:focus, input:focus{
+    border-color: #111;
+    box-shadow: 0 0 0 4px rgba(17,17,17,.08);
+  }
+
+  .grid2{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .btns{
+    display:flex;
+    gap:10px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+
+  button{
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: #fff;
+    cursor: pointer;
+    font-weight: 650;
+    transition: .12s;
+  }
+  button:hover{ transform: translateY(-1px); }
+  button.primary{
+    background:#111;
+    color:#fff;
+    border-color:#111;
+  }
+  button:disabled{
+    opacity:.5;
+    cursor:not-allowed;
+    transform:none;
+  }
+
+  .bar{
+    height: 10px;
+    background: #f0f0f1;
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    margin-top: 8px;
+  }
+  .bar > div{ height:100%; width:0%; background:#111; }
+
+  .foot{ color:var(--muted); font-size:12px; margin-top:10px; }
+
+  /* Items liste */
+  .item{
+    display:grid;
+    grid-template-columns: 64px 1fr auto;
+    gap: 12px;
+    align-items:center;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+  }
+  .item:first-child{ border-top:none; }
+
+  .thumb{
+    width:64px;
+    height:48px;
+    border-radius: 12px;
+    border:1px solid var(--border);
+    object-fit: cover;
+    background:#fff;
+  }
+
+  .name{ font-weight: 650; font-size: 14px; }
+  .meta{ color:var(--muted); font-size: 12px; margin-top:2px; }
+
+  .x{
+    border:none;
+    background:transparent;
+    font-size: 20px;
+    line-height: 1;
+    cursor:pointer;
+    color: #9aa0a6;
+    padding: 6px 8px;
+    border-radius: 10px;
+  }
+  .x:hover{ color:#111; background:#f3f4f6; }
+</style>
+
 </head>
 <body>
   <div class="wrap">
