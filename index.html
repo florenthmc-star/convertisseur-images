@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Convertisseur d’images (HEIC OK)</title>
+  <title>Convertisseur d’images (HEIC robuste)</title>
 
   <style>
     :root{
@@ -171,7 +171,7 @@
     <div class="top">
       <div>
         <h1 class="title">Convertisseur d’images</h1>
-        <p class="subtitle">Glisser-déposer • Conversion par lot • Redimensionnement • Compression • ZIP (tout dans le navigateur) • <strong>HEIC iPhone pris en charge</strong></p>
+        <p class="subtitle">Glisser-déposer • Conversion par lot • Redimensionnement • Compression • ZIP • <strong>HEIC robuste (iOS récents)</strong></p>
       </div>
       <div class="badge">Aucune image n’est envoyée sur un serveur</div>
     </div>
@@ -252,7 +252,7 @@
               <div class="progress-wrap">
                 <div class="bar" aria-label="Progression"><div id="prog"></div></div>
                 <div class="status" id="status">Aucun fichier.</div>
-                <div class="note">HEIC est converti en JPEG côté navigateur (WASM). Le ZIP utilise une librairie JS via CDN.</div>
+                <div class="note">HEIC est converti en JPEG/PNG côté navigateur (WASM). ZIP via JSZip.</div>
               </div>
             </div>
           </div>
@@ -260,13 +260,14 @@
       </div>
     </div>
 
-    <footer class="signature">© 2026 — Florent Amendola · Convertisseur d'image · v3.0 (HEIC robuste)</footer>
+    <footer class="signature">© 2026 — Florent Amendola · Convertisseur d'image · v3.1 (HEIC-to)</footer>
   </div>
 
   <!-- ZIP -->
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <!-- HEIC -> JPEG (client-side) -->
-  <script src="https://unpkg.com/heic2any/dist/heic2any.min.js"></script>
+
+  <!-- HEIC robust: heic-to (IIFE build, global HeicTo) -->
+  <script src="https://cdn.jsdelivr.net/npm/heic-to@1.3.0/dist/iife/heic-to.js"></script>
 
   <script>
     const drop = document.getElementById('drop');
@@ -288,22 +289,12 @@
     const countEl = document.getElementById('count');
 
     /**
-     * Meilleure version = on évite TOUTE double conversion:
-     * - si HEIC : on convertit une seule fois vers JPEG et on met en cache le Blob.
-     * - l’aperçu (thumb) utilise le JPEG cache (donc visible sur Chrome).
-     * - la conversion finale (canvas) lit le blob source (JPEG cache ou fichier original).
-     *
-     * @type {{
-     *  id: string,
-     *  file: File,
-     *  url: string,              // preview URL (compatible)
-     *  sourceBlob?: Blob,        // si HEIC, JPEG en cache
-     *  heicConverted?: boolean
-     * }[]}
+     * Cache HEIC pour éviter double conversion:
+     * - si HEIC: on stocke sourceBlob = JPEG/PNG (selon besoin) pour preview + pipeline
+     * - preview utilise toujours un format que Chrome sait afficher
      */
-    let files = [];
+    let files = []; // { id, file, url, sourceBlob?, heicConverted? }
 
-    // anti double trigger picker
     let picking = false;
     let lastPick = 0;
 
@@ -337,20 +328,6 @@
     function setProgress(p){ prog.style.width = `${Math.round(p*100)}%`; }
     function setStatus(txt){ statusEl.textContent = txt; }
     function updateCount(){ countEl.textContent = String(files.length); }
-
-    function isHeic(file){
-      const t = (file.type || '').toLowerCase();
-      const n = (file.name || '').toLowerCase();
-      return t === 'image/heic' || t === 'image/heif' || n.endsWith('.heic') || n.endsWith('.heif');
-    }
-
-    async function heicToJpegBlob(file){
-      if (typeof heic2any !== 'function') {
-        throw new Error("HEIC détecté mais le décodeur n'est pas chargé (heic2any).");
-      }
-      const out = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.98 });
-      return Array.isArray(out) ? out[0] : out;
-    }
 
     function revokeAll(){
       for (const it of files){
@@ -395,8 +372,8 @@
 
         const meta = document.createElement('div');
         meta.className = 'meta';
-        const typeTxt = it.file.type || (isHeic(it.file) ? 'image/heic' : 'image');
-        const extra = it.heicConverted ? ' • HEIC→JPEG (cache)' : '';
+        const typeTxt = it.file.type || 'image';
+        const extra = it.heicConverted ? ' • HEIC décodé' : '';
         meta.textContent = `${typeTxt} • ${fmtBytes(it.file.size)}${extra}`;
 
         info.appendChild(name);
@@ -431,28 +408,51 @@
       return (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + "_" + Math.random().toString(16).slice(2);
     }
 
-    // On prépare les items: HEIC converti une fois + preview visible
+    // --- HEIC robust via heic-to ---
+    async function isHeicRobust(file){
+      try{
+        if (!window.HeicTo || !window.HeicTo.isHeic) return false;
+        return await window.HeicTo.isHeic(file);
+      }catch{
+        // fallback extension / mime
+        const t = (file.type || '').toLowerCase();
+        const n = (file.name || '').toLowerCase();
+        return t === 'image/heic' || t === 'image/heif' || n.endsWith('.heic') || n.endsWith('.heif');
+      }
+    }
+
+    async function heicToJpegBlobRobust(file){
+      if (!window.HeicTo) throw new Error("Module HEIC non chargé (HeicTo).");
+      // On sort en JPEG pour compat preview + pipeline
+      const out = await window.HeicTo({
+        blob: file,
+        type: "image/jpeg",
+        quality: 0.98
+      });
+      // heic-to renvoie généralement un Blob
+      return out;
+    }
+
     async function prepareItem(file){
       const id = makeId();
 
-      if (isHeic(file)){
-        // On convertit une seule fois => cache JPEG
-        const jpegBlob = await heicToJpegBlob(file);
+      const heic = await isHeicRobust(file);
+      if (heic){
+        // Conversion unique en JPEG cache
+        const jpegBlob = await heicToJpegBlobRobust(file);
         const url = URL.createObjectURL(jpegBlob);
         return { id, file, url, sourceBlob: jpegBlob, heicConverted: true };
       }
 
-      // Pour les formats classiques, preview direct
       const url = URL.createObjectURL(file);
       return { id, file, url, heicConverted: false };
     }
 
     async function addFiles(fileList){
       const arr = Array.from(fileList || []);
-      const imgs = arr.filter(f => (f.type || '').startsWith('image/') || isHeic(f));
-      if (imgs.length === 0) return;
+      const candidates = arr.filter(f => (f.type || '').startsWith('image/') || (f.name || '').toLowerCase().endsWith('.heic') || (f.name || '').toLowerCase().endsWith('.heif'));
+      if (candidates.length === 0) return;
 
-      // UI rapide
       setStatus('Analyse des fichiers…');
       btnConvert.disabled = true;
       btnZip.disabled = true;
@@ -461,17 +461,13 @@
       let added = 0;
 
       try{
-        for (const f of imgs){
-          // On évite les doublons simples (même nom + taille + lastModified)
+        for (const f of candidates){
           const key = `${f.name}|${f.size}|${f.lastModified}`;
           const exists = files.some(it => `${it.file.name}|${it.file.size}|${it.file.lastModified}` === key);
           if (exists) continue;
 
-          if (isHeic(f)){
-            setStatus(`Conversion HEIC (aperçu) : ${f.name}…`);
-          } else {
-            setStatus(`Ajout : ${f.name}…`);
-          }
+          const maybeHeic = (f.name || '').toLowerCase().endsWith('.heic') || (f.type || '').toLowerCase().includes('heic');
+          setStatus(maybeHeic ? `Décodage HEIC : ${f.name}…` : `Ajout : ${f.name}…`);
 
           const item = await prepareItem(f);
           files.push(item);
@@ -492,13 +488,10 @@
     function openPicker(){
       const now = Date.now();
       if (picking && (now - lastPick) < 1200) return;
-
       picking = true;
       lastPick = now;
-
       picker.value = '';
       picker.click();
-
       setTimeout(() => { picking = false; }, 800);
     }
 
@@ -553,11 +546,9 @@
     }
 
     async function blobToBitmap(blob){
-      // createImageBitmap est le plus rapide + stable
       try{
         return await createImageBitmap(blob);
       }catch{
-        // fallback image decode
         const img = new Image();
         img.src = URL.createObjectURL(blob);
         await img.decode();
@@ -570,13 +561,11 @@
       }
     }
 
-    // Conversion unique: prend la "source" (fichier original ou blob cache HEIC->JPEG)
     async function convertOne(item){
       const outMime = formatEl.value;
       const outExt = extFromMime(outMime);
       const q = Math.min(1, Math.max(0.1, parseFloat(qualityEl.value) || 0.95));
 
-      // sourceBlob = JPEG cache si HEIC, sinon file d'origine
       const source = item.sourceBlob ? item.sourceBlob : item.file;
       const bmp = await blobToBitmap(source);
 
@@ -594,13 +583,10 @@
       ctx.drawImage(bmp, 0, 0, tw, th);
 
       const blob = await new Promise((resolve) => {
-        // PNG ignore quality param
         canvas.toBlob(resolve, outMime, (outMime === 'image/png') ? undefined : q);
       });
 
       if (!blob) throw new Error('Conversion impossible (format non supporté par ce navigateur).');
-
-      // Nom : on garde le nom original (même si HEIC) mais avec la nouvelle extension
       return { blob, filename: buildName(item.file.name, outExt) };
     }
 
@@ -621,13 +607,7 @@
       refreshUI();
     });
 
-    async function withLock(run){
-      // petite protection “double clic”
-      if (btnConvert.disabled && btnZip.disabled && btnClear.disabled) return;
-      await run();
-    }
-
-    btnConvert.addEventListener('click', () => withLock(async () => {
+    btnConvert.addEventListener('click', async () => {
       btnConvert.disabled = true;
       btnZip.disabled = true;
       btnClear.disabled = true;
@@ -652,9 +632,9 @@
         btnZip.disabled = false;
         btnClear.disabled = false;
       }
-    }));
+    });
 
-    btnZip.addEventListener('click', () => withLock(async () => {
+    btnZip.addEventListener('click', async () => {
       btnConvert.disabled = true;
       btnZip.disabled = true;
       btnClear.disabled = true;
@@ -683,17 +663,15 @@
         btnZip.disabled = false;
         btnClear.disabled = false;
       }
-    }));
+    });
 
-    // Message clair si les libs ne chargent pas (adblock / CSP)
     window.addEventListener('load', () => {
       const zipOk = (typeof JSZip !== 'undefined');
-      const heicOk = (typeof heic2any === 'function');
-      if (!zipOk){
-        setStatus("⚠️ JSZip n'a pas été chargé (AdBlock/CSP). Le ZIP peut ne pas fonctionner.");
-      } else if (!heicOk){
-        setStatus("⚠️ Le module HEIC n'a pas été chargé (AdBlock/CSP). Les HEIC peuvent échouer sur Chrome.");
-      }
+      const heicOk = (typeof window.HeicTo !== 'undefined');
+
+      if (!zipOk) setStatus("⚠️ JSZip non chargé (AdBlock/CSP). Le ZIP peut ne pas fonctionner.");
+      else if (!heicOk) setStatus("⚠️ Module HEIC non chargé (AdBlock/CSP). Les HEIC peuvent échouer.");
+
       refreshUI();
     });
 
