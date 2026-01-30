@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Convertisseur d’images</title>
+  <title>Convertisseur d’images (HEIC OK)</title>
 
   <style>
     :root{
@@ -58,7 +58,6 @@
     }
     .card-inner{ padding:var(--pad); display:grid; gap:var(--gap); }
 
-    /* IMPORTANT : le clic doit toujours passer */
     .drop{
       border:2px dashed var(--border);
       border-radius:var(--radius-xl);
@@ -72,7 +71,7 @@
       position:relative;
       pointer-events:auto;
     }
-    .drop *{ pointer-events:none; } /* évite les clics "perdus" sur les enfants */
+    .drop *{ pointer-events:none; }
     .drop.drag{ border-color:var(--accent); background:#f0f1f2; transform:translateY(-1px); }
     .drop h2{ margin:0 0 6px; font-size:clamp(15px, 1.8vw, 18px); line-height:1.2; }
     .drop p{ margin:0; color:var(--muted); font-size:clamp(12px, 1.3vw, 14px); line-height:1.35; }
@@ -117,6 +116,7 @@
     .thumb{ width:64px; height:48px; border-radius:var(--radius-md); border:1px solid var(--border); background:#fff; object-fit:cover; }
     .name{ font-weight:650; font-size:14px; line-height:1.2; word-break:break-word; }
     .meta{ color:var(--muted); font-size:12px; margin-top:3px; }
+
     .x{
       border:none; background:transparent; font-size:20px; line-height:1;
       cursor:pointer; color:#9aa0a6; padding:6px 8px; border-radius:10px; transition:.12s ease;
@@ -171,7 +171,7 @@
     <div class="top">
       <div>
         <h1 class="title">Convertisseur d’images</h1>
-        <p class="subtitle">Glisser-déposer • Conversion par lot • Redimensionnement • Compression (tout se fait dans le navigateur)</p>
+        <p class="subtitle">Glisser-déposer • Conversion par lot • Redimensionnement • Compression • ZIP (tout dans le navigateur) • <strong>HEIC iPhone pris en charge</strong></p>
       </div>
       <div class="badge">Aucune image n’est envoyée sur un serveur</div>
     </div>
@@ -181,8 +181,8 @@
         <div id="drop" class="drop" role="button" tabindex="0" aria-label="Zone de dépôt">
           <h2>Dépose tes images ici</h2>
           <p>ou clique pour sélectionner des fichiers</p>
-          <input id="picker" type="file" accept="image/*" multiple hidden>
-          <div class="hint">Formats en entrée : JPG / PNG / WebP… (HEIC iPhone : selon navigateur).</div>
+          <input id="picker" type="file" accept="image/*,.heic,.heif" multiple hidden>
+          <div class="hint">Entrée : JPG / PNG / WebP / HEIC. Sortie : JPG / PNG / WebP.</div>
         </div>
 
         <div class="columns">
@@ -214,7 +214,7 @@
                 </div>
                 <div class="field">
                   <label>Qualité (JPG/WebP)</label>
-                  <input id="quality" type="number" min="0.1" max="1" step="0.05" value="1" />
+                  <input id="quality" type="number" min="0.1" max="1" step="0.05" value="0.95" />
                 </div>
               </div>
 
@@ -252,7 +252,7 @@
               <div class="progress-wrap">
                 <div class="bar" aria-label="Progression"><div id="prog"></div></div>
                 <div class="status" id="status">Aucun fichier.</div>
-                <div class="note">Le ZIP utilise une librairie JS chargée via CDN.</div>
+                <div class="note">HEIC est converti en JPEG côté navigateur (WASM). Le ZIP utilise une librairie JS via CDN.</div>
               </div>
             </div>
           </div>
@@ -260,10 +260,13 @@
       </div>
     </div>
 
-    <footer class="signature">© 2026 — Florent Amendola · Convertisseur d'image · v2.2</footer>
+    <footer class="signature">© 2026 — Florent Amendola · Convertisseur d'image · v3.0 (HEIC robuste)</footer>
   </div>
 
+  <!-- ZIP -->
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <!-- HEIC -> JPEG (client-side) -->
+  <script src="https://unpkg.com/heic2any/dist/heic2any.min.js"></script>
 
   <script>
     const drop = document.getElementById('drop');
@@ -284,10 +287,23 @@
     const statusEl = document.getElementById('status');
     const countEl = document.getElementById('count');
 
-    /** @type {{file: File, url: string}[]} */
+    /**
+     * Meilleure version = on évite TOUTE double conversion:
+     * - si HEIC : on convertit une seule fois vers JPEG et on met en cache le Blob.
+     * - l’aperçu (thumb) utilise le JPEG cache (donc visible sur Chrome).
+     * - la conversion finale (canvas) lit le blob source (JPEG cache ou fichier original).
+     *
+     * @type {{
+     *  id: string,
+     *  file: File,
+     *  url: string,              // preview URL (compatible)
+     *  sourceBlob?: Blob,        // si HEIC, JPEG en cache
+     *  heicConverted?: boolean
+     * }[]}
+     */
     let files = [];
 
-    // Google Sites / iframes peuvent déclencher 2 clics. On verrouille uniquement sur clic.
+    // anti double trigger picker
     let picking = false;
     let lastPick = 0;
 
@@ -321,6 +337,26 @@
     function setProgress(p){ prog.style.width = `${Math.round(p*100)}%`; }
     function setStatus(txt){ statusEl.textContent = txt; }
     function updateCount(){ countEl.textContent = String(files.length); }
+
+    function isHeic(file){
+      const t = (file.type || '').toLowerCase();
+      const n = (file.name || '').toLowerCase();
+      return t === 'image/heic' || t === 'image/heif' || n.endsWith('.heic') || n.endsWith('.heif');
+    }
+
+    async function heicToJpegBlob(file){
+      if (typeof heic2any !== 'function') {
+        throw new Error("HEIC détecté mais le décodeur n'est pas chargé (heic2any).");
+      }
+      const out = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.98 });
+      return Array.isArray(out) ? out[0] : out;
+    }
+
+    function revokeAll(){
+      for (const it of files){
+        try{ URL.revokeObjectURL(it.url); }catch{}
+      }
+    }
 
     function refreshUI(){
       listEl.innerHTML = '';
@@ -359,7 +395,9 @@
 
         const meta = document.createElement('div');
         meta.className = 'meta';
-        meta.textContent = `${it.file.type || 'image'} • ${fmtBytes(it.file.size)}`;
+        const typeTxt = it.file.type || (isHeic(it.file) ? 'image/heic' : 'image');
+        const extra = it.heicConverted ? ' • HEIC→JPEG (cache)' : '';
+        meta.textContent = `${typeTxt} • ${fmtBytes(it.file.size)}${extra}`;
 
         info.appendChild(name);
         info.appendChild(meta);
@@ -389,35 +427,82 @@
       refreshUI();
     }
 
-    function addFiles(fileList){
-      const arr = Array.from(fileList || []);
-      const imgs = arr.filter(f => f.type.startsWith('image/'));
-      for (const f of imgs){
-        files.push({ file: f, url: URL.createObjectURL(f) });
-      }
-      refreshUI();
+    function makeId(){
+      return (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + "_" + Math.random().toString(16).slice(2);
     }
 
-    // --- Ouvrir le picker : version compatible iframe ---
+    // On prépare les items: HEIC converti une fois + preview visible
+    async function prepareItem(file){
+      const id = makeId();
+
+      if (isHeic(file)){
+        // On convertit une seule fois => cache JPEG
+        const jpegBlob = await heicToJpegBlob(file);
+        const url = URL.createObjectURL(jpegBlob);
+        return { id, file, url, sourceBlob: jpegBlob, heicConverted: true };
+      }
+
+      // Pour les formats classiques, preview direct
+      const url = URL.createObjectURL(file);
+      return { id, file, url, heicConverted: false };
+    }
+
+    async function addFiles(fileList){
+      const arr = Array.from(fileList || []);
+      const imgs = arr.filter(f => (f.type || '').startsWith('image/') || isHeic(f));
+      if (imgs.length === 0) return;
+
+      // UI rapide
+      setStatus('Analyse des fichiers…');
+      btnConvert.disabled = true;
+      btnZip.disabled = true;
+      btnClear.disabled = true;
+
+      let added = 0;
+
+      try{
+        for (const f of imgs){
+          // On évite les doublons simples (même nom + taille + lastModified)
+          const key = `${f.name}|${f.size}|${f.lastModified}`;
+          const exists = files.some(it => `${it.file.name}|${it.file.size}|${it.file.lastModified}` === key);
+          if (exists) continue;
+
+          if (isHeic(f)){
+            setStatus(`Conversion HEIC (aperçu) : ${f.name}…`);
+          } else {
+            setStatus(`Ajout : ${f.name}…`);
+          }
+
+          const item = await prepareItem(f);
+          files.push(item);
+          added++;
+          refreshUI();
+        }
+      }catch(err){
+        console.error(err);
+        alert(err.message || "Erreur lors de l'ajout des fichiers.");
+      }finally{
+        btnConvert.disabled = (files.length === 0);
+        btnZip.disabled = (files.length === 0);
+        btnClear.disabled = (files.length === 0);
+        setStatus(added ? `${files.length} fichier(s) prêt(s).` : `${files.length} fichier(s) prêt(s). (aucun nouveau fichier)`);
+      }
+    }
+
     function openPicker(){
       const now = Date.now();
-      // anti double trigger (mais pas trop agressif, sinon ça bloque)
       if (picking && (now - lastPick) < 1200) return;
 
       picking = true;
       lastPick = now;
 
-      // reset AVANT ouverture (important)
       picker.value = '';
       picker.click();
 
-      // si l'utilisateur annule, on libère via focus
       setTimeout(() => { picking = false; }, 800);
     }
 
-    // CLIC SUR LA ZONE (les enfants sont pointer-events:none, donc toujours capté ici)
     drop.addEventListener('click', () => openPicker());
-
     drop.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
@@ -425,44 +510,25 @@
       }
     });
 
-    // Quand on choisit un fichier
-    picker.addEventListener('change', () => {
-      addFiles(picker.files);
+    picker.addEventListener('change', async () => {
+      await addFiles(picker.files);
       picker.value = '';
       picking = false;
     });
 
-    // Drag & drop
     drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('drag'); });
     drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
-    drop.addEventListener('drop', (e) => {
+    drop.addEventListener('drop', async (e) => {
       e.preventDefault();
       drop.classList.remove('drag');
-      addFiles(e.dataTransfer.files);
+      await addFiles(e.dataTransfer.files);
     });
 
-    // Resize controls
     function updateResizeUI(){
       resizeValueEl.disabled = (resizeModeEl.value === 'none');
     }
     resizeModeEl.addEventListener('change', updateResizeUI);
     updateResizeUI();
-
-    async function fileToBitmap(file){
-      try{
-        return await createImageBitmap(file);
-      }catch{
-        const img = new Image();
-        img.src = URL.createObjectURL(file);
-        await img.decode();
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        canvas.getContext('2d').drawImage(img,0,0);
-        URL.revokeObjectURL(img.src);
-        return await createImageBitmap(canvas);
-      }
-    }
 
     function computeTargetSize(w,h){
       const mode = resizeModeEl.value;
@@ -486,12 +552,34 @@
       return {tw:w, th:h};
     }
 
-    async function convertOne(file){
+    async function blobToBitmap(blob){
+      // createImageBitmap est le plus rapide + stable
+      try{
+        return await createImageBitmap(blob);
+      }catch{
+        // fallback image decode
+        const img = new Image();
+        img.src = URL.createObjectURL(blob);
+        await img.decode();
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img,0,0);
+        URL.revokeObjectURL(img.src);
+        return await createImageBitmap(canvas);
+      }
+    }
+
+    // Conversion unique: prend la "source" (fichier original ou blob cache HEIC->JPEG)
+    async function convertOne(item){
       const outMime = formatEl.value;
       const outExt = extFromMime(outMime);
-      const q = Math.min(1, Math.max(0.1, parseFloat(qualityEl.value) || 0.9));
+      const q = Math.min(1, Math.max(0.1, parseFloat(qualityEl.value) || 0.95));
 
-      const bmp = await fileToBitmap(file);
+      // sourceBlob = JPEG cache si HEIC, sinon file d'origine
+      const source = item.sourceBlob ? item.sourceBlob : item.file;
+      const bmp = await blobToBitmap(source);
+
       const {tw, th} = computeTargetSize(bmp.width, bmp.height);
 
       const canvas = document.createElement('canvas');
@@ -506,11 +594,14 @@
       ctx.drawImage(bmp, 0, 0, tw, th);
 
       const blob = await new Promise((resolve) => {
+        // PNG ignore quality param
         canvas.toBlob(resolve, outMime, (outMime === 'image/png') ? undefined : q);
       });
 
       if (!blob) throw new Error('Conversion impossible (format non supporté par ce navigateur).');
-      return { blob, filename: buildName(file.name, outExt) };
+
+      // Nom : on garde le nom original (même si HEIC) mais avec la nouvelle extension
+      return { blob, filename: buildName(item.file.name, outExt) };
     }
 
     function downloadBlob(blob, filename){
@@ -525,12 +616,18 @@
     }
 
     btnClear.addEventListener('click', () => {
-      for (const it of files) URL.revokeObjectURL(it.url);
+      revokeAll();
       files = [];
       refreshUI();
     });
 
-    btnConvert.addEventListener('click', async () => {
+    async function withLock(run){
+      // petite protection “double clic”
+      if (btnConvert.disabled && btnZip.disabled && btnClear.disabled) return;
+      await run();
+    }
+
+    btnConvert.addEventListener('click', () => withLock(async () => {
       btnConvert.disabled = true;
       btnZip.disabled = true;
       btnClear.disabled = true;
@@ -541,7 +638,7 @@
       try{
         for (let i=0;i<files.length;i++){
           setStatus(`Conversion ${i+1}/${files.length}…`);
-          const {blob, filename} = await convertOne(files[i].file);
+          const {blob, filename} = await convertOne(files[i]);
           downloadBlob(blob, filename);
           setProgress((i+1)/files.length);
         }
@@ -555,9 +652,9 @@
         btnZip.disabled = false;
         btnClear.disabled = false;
       }
-    });
+    }));
 
-    btnZip.addEventListener('click', async () => {
+    btnZip.addEventListener('click', () => withLock(async () => {
       btnConvert.disabled = true;
       btnZip.disabled = true;
       btnClear.disabled = true;
@@ -569,7 +666,7 @@
         const zip = new JSZip();
         for (let i=0;i<files.length;i++){
           setStatus(`Préparation ${i+1}/${files.length}…`);
-          const {blob, filename} = await convertOne(files[i].file);
+          const {blob, filename} = await convertOne(files[i]);
           zip.file(filename, blob);
           setProgress((i+1)/files.length);
         }
@@ -586,6 +683,18 @@
         btnZip.disabled = false;
         btnClear.disabled = false;
       }
+    }));
+
+    // Message clair si les libs ne chargent pas (adblock / CSP)
+    window.addEventListener('load', () => {
+      const zipOk = (typeof JSZip !== 'undefined');
+      const heicOk = (typeof heic2any === 'function');
+      if (!zipOk){
+        setStatus("⚠️ JSZip n'a pas été chargé (AdBlock/CSP). Le ZIP peut ne pas fonctionner.");
+      } else if (!heicOk){
+        setStatus("⚠️ Le module HEIC n'a pas été chargé (AdBlock/CSP). Les HEIC peuvent échouer sur Chrome.");
+      }
+      refreshUI();
     });
 
     refreshUI();
